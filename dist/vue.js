@@ -353,20 +353,30 @@
 	// 依赖收集 不同的组件有不同的watcher
 
 	var Watcher = /*#__PURE__*/function () {
-	  function Watcher(vm, fn, options) {
+	  function Watcher(vm, exprOrFn, options, cb) {
 	    _classCallCheck(this, Watcher);
 
 	    this.id = id++;
 	    this.renderWatcher = options;
-	    this.getter = fn; //getter意味着调用这个函数可以发生取值操作
+
+	    if (typeof exprOrFn === 'string') {
+	      this.getter = function () {
+	        return vm[exprOrFn];
+	      };
+	    } else {
+	      this.getter = exprOrFn; //getter意味着调用这个函数可以发生取值操作
+	    }
 
 	    this.deps = []; //后续我们实现计算属性和一些清理工作需要用到
 
 	    this.depsId = new Set();
 	    this.lazy = options.lazy;
+	    this.cb = cb;
 	    this.dirty = this.lazy;
 	    this.vm = vm;
-	    this.lazy ? undefined : this.get(); // this.get()
+	    this.user = options.user; //标识是否是用户自己的watcher
+
+	    this.value = this.lazy ? undefined : this.get();
 	  }
 
 	  _createClass(Watcher, [{
@@ -420,7 +430,12 @@
 	  }, {
 	    key: "run",
 	    value: function run() {
-	      this.get();
+	      var oldValue = this.value;
+	      var newValue = this.get();
+
+	      if (this.user) {
+	        this.cb.call(this.vm, newValue, oldValue);
+	      }
 	    }
 	  }]);
 
@@ -516,7 +531,38 @@
 	  if (opt.computed) {
 	    initComputed(vm);
 	  }
+
+	  if (opt.watch) {
+	    initWatch(vm);
+	  }
+	} // 初始化watch
+
+	function initWatch(vm) {
+	  var watch = vm.$options.watch;
+
+	  for (var key in watch) {
+	    // 拿到值  判断是什么情况
+	    var handler = watch[key];
+
+	    if (Array.isArray(handler)) {
+	      for (var i = 0; i < handler.length; i++) {
+	        createWatcher(vm, key, handler[i]);
+	      }
+	    } else {
+	      createWatcher(vm, key, handler);
+	    }
+	  }
+	}
+
+	function createWatcher(vm, key, handler) {
+	  // handler可能是字符串 函数 对象（不考虑）
+	  if (typeof handler === 'string') {
+	    handler = vm[handler];
+	  }
+
+	  return vm.$watch(key, handler);
 	} // 代理数据 get set时触发 返回指定数据
+
 
 	function proxy(vm, target, key) {
 	  Object.defineProperty(vm, key, {
@@ -1021,7 +1067,13 @@
 	Vue.prototype.$nextTick = nextTick;
 	initMixin(Vue);
 	initLifeCycle(Vue);
-	initGlobalApi(Vue);
+	initGlobalApi(Vue); //  所有watch 最终调用的都是这个方法
+
+	Vue.prototype.$watch = function (exprOrFn, cb) {
+	  new Watcher(this, exprOrFn, {
+	    user: true
+	  }, cb);
+	};
 
 	return Vue;
 

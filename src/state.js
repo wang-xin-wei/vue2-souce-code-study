@@ -12,7 +12,38 @@ export function initState(vm) {
 	if (opt.computed) {
 		initComputed(vm)
 	}
+	if(opt.watch){
+		initWatch(vm)
+	}
 }
+
+
+// 初始化watch
+function initWatch(vm) {
+	let watch = vm.$options.watch
+	for (const key in watch) {
+		// 拿到值  判断是什么情况
+		const handler = watch[key]
+		if(Array.isArray(handler)){
+			for (let i = 0; i < handler.length; i++) {
+				createWatcher(vm,key,handler[i])
+				
+			}
+		}else{
+			createWatcher(vm,key,handler)
+		}
+	}
+}
+
+
+function createWatcher(vm,key,handler) {
+	// handler可能是字符串 函数 对象（不考虑）
+	if(typeof handler === 'string'){
+		handler = vm[handler]
+	}
+	return vm.$watch(key,handler)
+}
+
 
 // 代理数据 get set时触发 返回指定数据
 function proxy(vm, target, key) {

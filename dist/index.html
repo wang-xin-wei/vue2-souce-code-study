@@ -7,29 +7,33 @@
 		<title>Document</title>
 	</head>
 	<body>
-		<div id="app">
-			{{ fullname }} {{ fullname }} {{ fullname }}
-		</div>
+		<div id="app">{{ firstname }} {{ lastname }}</div>
 		<script src="./vue.js"></script>
+		<!-- <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.12/vue.js"></script> -->
 		<script>
 			let vm = new Vue({
 				el: '#app',
 				data: {
 					firstname: '张',
-					lastname: '三'
+					lastname: '三',
 				},
-				computed:{
-					fullname(){
-						console.log("run");
-						return this.firstname + this.lastname
-					}
-				}
+
+				watch: {
+					firstname(newVal,oldVal) {
+						console.log(newVal,oldVal,'22');
+					},
+				},
 			})
-			
+
+			vm.$watch(()=>vm.firstname,(newVal,oldVal)=>{
+				console.log(newVal,oldVal,'11');
+			})
+
 
 			setTimeout(()=>{
 				vm.firstname = '李'
-			},2000)
+			},1000)
+			
 		</script>
 	</body>
 </html>
