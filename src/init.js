@@ -1,13 +1,19 @@
 import { initState } from './state'
 import { compileToFunction } from './compiler/index'
-import { mountComponents } from './lifeCycle'
+import { mountComponents, callHook } from './lifeCycle'
+import { mergeOptions } from './utils'
 
 export function initMixin(Vue) {
 	Vue.prototype._init = function (options) {
 		const vm = this
-		vm.$options = options //将用户的实例挂载到实例（vm）上
+		// 将我们定义的全局指令和过滤器  都挂载在实例上
+		vm.$options = mergeOptions(this.constructor.options,options) //将用户的实例挂载到实例（vm）上
 
+		callHook(vm,'beforeCreate')
+		
 		initState(vm) //初始化状态
+
+		callHook(vm,'created')
 
 		if (options.el) {
 			vm.$mount(options.el)
@@ -15,7 +21,7 @@ export function initMixin(Vue) {
 	}
 
 	Vue.prototype.$mount = function (el) {
-    const vm = this
+		const vm = this
 		el = document.querySelector(el)
 		let opts = vm.$options
 		// 检查options上有没有render函数
@@ -30,12 +36,12 @@ export function initMixin(Vue) {
 				}
 			}
 
-      if(templete){
-        // 对模板进行编译
-        const render = compileToFunction(templete)
-        opts.render = render
-      }
-			mountComponents(vm,el)   //组件的挂载
+			if (templete) {
+				// 对模板进行编译
+				const render = compileToFunction(templete)
+				opts.render = render
+			}
+			mountComponents(vm, el) //组件的挂载
 		}
 	}
 }

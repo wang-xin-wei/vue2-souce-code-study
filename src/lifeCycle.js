@@ -38,10 +38,10 @@ function patch(oldVNode, vnode) {
 
 		const parentElm = elm.parentNode
 		let newElm = createElm(vnode)
-    parentElm.insertBefore(newElm,elm.nextSibling)  //插入新的节点
-    parentElm.removeChild(elm)   //删除旧的节点
+		parentElm.insertBefore(newElm, elm.nextSibling) //插入新的节点
+		parentElm.removeChild(elm) //删除旧的节点
 
-    return newElm
+		return newElm
 	} else {
 		// diff算法
 	}
@@ -82,14 +82,13 @@ export function initLifeCycle(Vue) {
 export function mountComponents(vm, el) {
 	vm.$el = el
 
-  const updateComponents = () => {
-    vm._update(vm._render())
-  }
-  // true用于标识是一个渲染watcher
-  new Watcher(vm,updateComponents,true)
+	const updateComponents = () => {
+		vm._update(vm._render())
+	}
+	// true用于标识是一个渲染watcher
+	new Watcher(vm, updateComponents, true)
 
 	// 调用render方法 产生虚拟dom
-	
 
 	// 根据虚拟dom产生真实dom
 
@@ -108,3 +107,13 @@ export function mountComponents(vm, el) {
  * render函数会去产生虚拟节点 使用响应式数据
  * 根据生成的虚拟节点创造真实的dom
  */
+
+// 执行hook方法
+export function callHook(vm, hook) {
+	const handlers = vm.$options[hook]
+	if (handlers) {
+		handlers.forEach(handler => {
+			handler.call(vm)
+		})
+	}
+}
