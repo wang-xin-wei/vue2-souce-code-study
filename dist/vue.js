@@ -131,11 +131,12 @@
           break;
       }
 
-      console.log(inserted);
-
       if (inserted) {
         ob.observeArray(inserted);
-      }
+      } // 更新数组
+
+
+      ob.dep.notify(); //数组变化了 通知对应的watcher更新
 
       return result;
     };
@@ -182,7 +183,9 @@
     function Observe(data) {
       _classCallCheck(this, Observe);
 
-      //将__ob__变成不可枚举，循环的时候无法获取
+      // 给每个对象都添加收集功能
+      this.dep = new Dep(); //将__ob__变成不可枚举，循环的时候无法获取
+
       Object.defineProperty(data, '__ob__', {
         value: this,
         enumerable: false
@@ -219,13 +222,25 @@
     }]);
 
     return Observe;
-  }(); // 传入 源数据、key、value
+  }(); // 递归收集数组的依赖
+
+
+  function dependArray(value) {
+    for (var i = 0; i < value.length; i++) {
+      var current = value[i];
+      current.__ob__ && current.__ob__.dep.depend();
+
+      if (Array.isArray(current)) {
+        dependArray(current);
+      }
+    }
+  } // 传入 源数据、key、value
   // 此处产生了闭包 因为set方法可以访问 defineReactive 的 value
 
 
   function defineReactive(target, key, value) {
     // 如果当前的value还是一个对象 递归执行observe
-    observe(value); // 每个属性都创建一个dep
+    var childOb = observe(value); // 每个属性都创建一个dep
 
     var dep = new Dep();
     Object.defineProperty(target, key, {
@@ -233,6 +248,14 @@
       get: function get() {
         if (Dep.target) {
           dep.depend(); //让这个属性的收集器记住当前的watcher
+
+          if (childOb) {
+            childOb.dep.depend(); //让对象和数组本身也实现依赖收集
+
+            if (Array.isArray(value)) {
+              dependArray(value);
+            }
+          }
         }
 
         return value;
@@ -563,13 +586,96 @@
     }, {
       key: "update",
       value: function update() {
-        console.log("update---------");
+        queenWatcher(this); //吧当前的watcher暂存起来
+      }
+    }, {
+      key: "run",
+      value: function run() {
         this.get();
       }
     }]);
 
     return Watcher;
-  }(); // 需要给每个属性增加一个dep  目的是收集watcher
+  }();
+
+  var queen = [];
+  var has = {};
+  var pending = false;
+
+  function flushSchedulerQueen() {
+    var flushQueen = queen.slice(0);
+    queen = [];
+    has = {};
+    pending = false;
+    flushQueen.forEach(function (q) {
+      q.run();
+    });
+  }
+
+  function queenWatcher(watcher) {
+    var id = watcher.id;
+
+    if (!has[id]) {
+      queen.push(watcher);
+      has[id] = true; // 不管update 执行多少次 但是最终只执行一轮 刷新操作
+
+      if (!pending) {
+        setTimeout(flushSchedulerQueen, 0);
+        pending = true;
+      }
+    }
+  }
+
+  var callbacks = [];
+  var waiting = false;
+
+  function flushCallbacks() {
+    var cbs = callbacks.slice(0);
+    waiting = false;
+    callbacks = [];
+    cbs.forEach(function (cb) {
+      return cb();
+    });
+  } // nextTick 不是创建了一个异步任务  而是将这个任务维护到了队列中
+  // nextTick 没有直接使用某个api  而是采用优雅降级的方式
+
+
+  var timerFunc;
+
+  if (Promise) {
+    timerFunc = function timerFunc() {
+      Promise.resolve().then(function () {
+      });
+    };
+  } else if (MutationObserver) {
+    //这里传入的回调是异步的
+    var observer = new MutationObserver(flushCallbacks);
+    var textNode = document.createTextNode(1);
+    observer.observe(textNode, {
+      characterData: true
+    });
+
+    timerFunc = function timerFunc() {
+      textNode.textContent = 2;
+    };
+  } else if (setImmediate) {
+    timerFunc = function timerFunc() {
+      setImmediate(flushCallbacks);
+    };
+  } else {
+    timerFunc = function timerFunc() {
+      setTimeout(flushCallbacks);
+    };
+  }
+
+  function nextTick(cb) {
+    callbacks.push(cb); //维护nextTick中的callback方法
+
+    if (!waiting) {
+      timerFunc();
+      waiting = true;
+    }
+  } // 需要给每个属性增加一个dep  目的是收集watcher
 
   // h() _c()
   function createElementVNode(vm, tag, data) {
@@ -755,6 +861,7 @@
 
   }
 
+  Vue.prototype.$nextTick = nextTick;
   initMixin(Vue);
   initLifeCycle(Vue);
 

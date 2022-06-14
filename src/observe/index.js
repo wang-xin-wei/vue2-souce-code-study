@@ -3,6 +3,9 @@ import Dep from './dep'
 
 class Observe {
 	constructor(data) {
+		// 给每个对象都添加收集功能
+		this.dep = new Dep()
+
 		//将__ob__变成不可枚举，循环的时候无法获取
 		Object.defineProperty(data, '__ob__', {
 			value: this,
@@ -30,11 +33,24 @@ class Observe {
 	}
 }
 
+
+// 递归收集数组的依赖
+function dependArray(value){
+	for (let i = 0; i < value.length; i++) {
+		let current = value[i]
+		current.__ob__ && current.__ob__.dep.depend()
+		if(Array.isArray(current)){
+			dependArray(current)
+		}
+	}
+}
+
+
 // 传入 源数据、key、value
 // 此处产生了闭包 因为set方法可以访问 defineReactive 的 value
 export function defineReactive(target, key, value) {
 	// 如果当前的value还是一个对象 递归执行observe
-	observe(value)
+	let childOb = observe(value)
 	// 每个属性都创建一个dep
 	let dep = new Dep()
 	Object.defineProperty(target, key, {
@@ -42,6 +58,12 @@ export function defineReactive(target, key, value) {
 		get() {
 			if (Dep.target) {
 				dep.depend() //让这个属性的收集器记住当前的watcher
+				if (childOb) {
+					childOb.dep.depend() //让对象和数组本身也实现依赖收集
+					if(Array.isArray(value)){
+						dependArray(value)
+					}
+				}
 			}
 			return value
 		},
@@ -51,7 +73,7 @@ export function defineReactive(target, key, value) {
 			if (value === newValue) return
 			observe(newValue)
 			value = newValue
-			dep.notify()   //通知更新
+			dep.notify() //通知更新
 		},
 	})
 }

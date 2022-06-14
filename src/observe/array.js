@@ -28,11 +28,12 @@ methods.forEach((method)=>{
         break;
     }
 
-    console.log(inserted); 
     if(inserted){
       ob.observeArray(inserted)
     }
 
+    // 更新数组
+    ob.dep.notify()  //数组变化了 通知对应的watcher更新
     return result
   }
 })

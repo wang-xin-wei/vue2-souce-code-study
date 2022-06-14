@@ -9,10 +9,10 @@
 	<body>
 		<div id="app" style="color:red">
 			<div class="msg">
-				{{ msg }} bilibili {{ test }} bilibili
+				{{ msg }} 
 			</div>
 			<div class="test">
-				test
+				{{ arr }}
 			</div>
 		</div>
 		<script src="./vue.js"></script>
@@ -26,15 +26,10 @@
             name:'hello',
             age: 18
           },
-					arr:[{a:1},{b:2},3,4,5]
+					arr:[3,4,5,[1,2]]
 				}
 			})
-
-			setTimeout(()=>{
-				// vm.msg = 'bilibili'
-				// vm.test = 'dilidili'
-				vm.obj = 'ok'
-			},3000)
+			vm.arr[3].push(3)
 		</script>
 	</body>
 </html>
