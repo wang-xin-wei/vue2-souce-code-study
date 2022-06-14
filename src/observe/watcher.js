@@ -1,4 +1,4 @@
-import Dep from './dep'
+import Dep, { popTarget, pushTarget } from './dep'
 
 let id = 0
 
@@ -17,7 +17,12 @@ class Watcher {
 		this.getter = fn //getter意味着调用这个函数可以发生取值操作
 		this.deps = [] //后续我们实现计算属性和一些清理工作需要用到
 		this.depsId = new Set()
-		this.get()
+		this.lazy = options.lazy
+		this.dirty = this.lazy
+		this.vm = vm
+		this.lazy ? undefined : this.get()
+
+		// this.get()
 	}
 	addDep(dep) {
 		// 一个组件对应着多个属性  重复的属性也不用记录
@@ -29,12 +34,33 @@ class Watcher {
 			dep.addSub(this) //watcher已经记住dep而且去重了 此时dep也记住watcher
 		}
 	}
+	evaluete(){
+		//获取到用户函数的返回值 并表示为脏
+		this.value = this.get()  
+		this.dirty = false
+	}
 	get() {
-		Dep.target = this
-		this.getter() //去vm上取值
+		pushTarget(this)
+		let value = this.getter.call(this.vm) //去vm上取值
+		popTarget()
+
+		return value
+	}
+	depend(){
+		let i = this.deps.length
+
+		while(i--){
+			// 让计算属性watcher 也收集渲染watcher
+			this.deps[i].depend()
+		}
 	}
 	update() {
-		queenWatcher(this) //吧当前的watcher暂存起来
+		if(this.lazy){
+			// 如果是计算属性 依赖的值变化了 就表示计算属性是脏值
+			this.dirty = true
+		}else{
+			queenWatcher(this) //吧当前的watcher暂存起来
+		}
 	}
 	run() {
 		this.get()

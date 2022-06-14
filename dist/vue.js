@@ -148,6 +148,52 @@
 	  throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
 	}
 
+	var id$1 = 0;
+
+	var Dep = /*#__PURE__*/function () {
+	  function Dep() {
+	    _classCallCheck(this, Dep);
+
+	    this.id = id$1++; //属性的dep要收集watcher
+
+	    this.subs = []; //这里存放着当前属性对应的watcher有哪些
+	  }
+
+	  _createClass(Dep, [{
+	    key: "depend",
+	    value: function depend() {
+	      // 我们不希望放重复的watcher 重复收集
+	      // this.subs.push(Dep.target)  //这种方式可能会重复收集
+	      Dep.target.addDep(this);
+	    }
+	  }, {
+	    key: "addSub",
+	    value: function addSub(watcher) {
+	      this.subs.push(watcher);
+	    }
+	  }, {
+	    key: "notify",
+	    value: function notify() {
+	      this.subs.forEach(function (watcher) {
+	        watcher.update(); //高速watcher去更新
+	      });
+	    }
+	  }]);
+
+	  return Dep;
+	}();
+
+	Dep.target = null;
+	var stack = [];
+	function pushTarget(watcher) {
+	  stack.push(watcher);
+	  Dep.target = watcher;
+	}
+	function popTarget() {
+	  stack.pop();
+	  Dep.target = stack[stack.length - 1];
+	}
+
 	// 保存旧的数组原型方法
 	var oldArrProto = Array.prototype; // 创建新的数组方法 在新的方法上操作数组  不改变原先的方法
 
@@ -191,43 +237,6 @@
 	    return result;
 	  };
 	});
-
-	var id$1 = 0;
-
-	var Dep = /*#__PURE__*/function () {
-	  function Dep() {
-	    _classCallCheck(this, Dep);
-
-	    this.id = id$1++; //属性的dep要收集watcher
-
-	    this.subs = []; //这里存放着当前属性对应的watcher有哪些
-	  }
-
-	  _createClass(Dep, [{
-	    key: "depend",
-	    value: function depend() {
-	      // 我们不希望放重复的watcher 重复收集
-	      // this.subs.push(Dep.target)  //这种方式可能会重复收集
-	      Dep.target.addDep(this);
-	    }
-	  }, {
-	    key: "addSub",
-	    value: function addSub(watcher) {
-	      this.subs.push(watcher);
-	    }
-	  }, {
-	    key: "notify",
-	    value: function notify() {
-	      this.subs.forEach(function (watcher) {
-	        watcher.update(); //高速watcher去更新
-	      });
-	    }
-	  }]);
-
-	  return Dep;
-	}();
-
-	Dep.target = null;
 
 	var Observe = /*#__PURE__*/function () {
 	  function Observe(data) {
@@ -334,11 +343,178 @@
 	  return new Observe(data);
 	}
 
+	var id = 0;
+	/**
+	 * 1：当我们创建渲染watcher的时候我们会把当前渲染的watcher放到dep.target上
+	 * 2：调用render会取值 走到get上
+	 * 注意：每个属性有一个dep （属性就是被观察者），watcher就是观察者
+	 * 属性变化了会通知观察者来更新 -->观察者模式
+	 */
+	// 依赖收集 不同的组件有不同的watcher
+
+	var Watcher = /*#__PURE__*/function () {
+	  function Watcher(vm, fn, options) {
+	    _classCallCheck(this, Watcher);
+
+	    this.id = id++;
+	    this.renderWatcher = options;
+	    this.getter = fn; //getter意味着调用这个函数可以发生取值操作
+
+	    this.deps = []; //后续我们实现计算属性和一些清理工作需要用到
+
+	    this.depsId = new Set();
+	    this.lazy = options.lazy;
+	    this.dirty = this.lazy;
+	    this.vm = vm;
+	    this.lazy ? undefined : this.get(); // this.get()
+	  }
+
+	  _createClass(Watcher, [{
+	    key: "addDep",
+	    value: function addDep(dep) {
+	      // 一个组件对应着多个属性  重复的属性也不用记录
+	      var id = dep.id;
+
+	      if (!this.depsId.has(id)) {
+	        this.deps.push(dep);
+	        this.depsId.add(id);
+	        dep.addSub(this); //watcher已经记住dep而且去重了 此时dep也记住watcher
+	      }
+	    }
+	  }, {
+	    key: "evaluete",
+	    value: function evaluete() {
+	      //获取到用户函数的返回值 并表示为脏
+	      this.value = this.get();
+	      this.dirty = false;
+	    }
+	  }, {
+	    key: "get",
+	    value: function get() {
+	      pushTarget(this);
+	      var value = this.getter.call(this.vm); //去vm上取值
+
+	      popTarget();
+	      return value;
+	    }
+	  }, {
+	    key: "depend",
+	    value: function depend() {
+	      var i = this.deps.length;
+
+	      while (i--) {
+	        // 让计算属性watcher 也收集渲染watcher
+	        this.deps[i].depend();
+	      }
+	    }
+	  }, {
+	    key: "update",
+	    value: function update() {
+	      if (this.lazy) {
+	        // 如果是计算属性 依赖的值变化了 就表示计算属性是脏值
+	        this.dirty = true;
+	      } else {
+	        queenWatcher(this); //吧当前的watcher暂存起来
+	      }
+	    }
+	  }, {
+	    key: "run",
+	    value: function run() {
+	      this.get();
+	    }
+	  }]);
+
+	  return Watcher;
+	}();
+
+	var queen = [];
+	var has = {};
+	var pending = false;
+
+	function flushSchedulerQueen() {
+	  var flushQueen = queen.slice(0);
+	  queen = [];
+	  has = {};
+	  pending = false;
+	  flushQueen.forEach(function (q) {
+	    q.run();
+	  });
+	}
+
+	function queenWatcher(watcher) {
+	  var id = watcher.id;
+
+	  if (!has[id]) {
+	    queen.push(watcher);
+	    has[id] = true; // 不管update 执行多少次 但是最终只执行一轮 刷新操作
+
+	    if (!pending) {
+	      setTimeout(flushSchedulerQueen, 0);
+	      pending = true;
+	    }
+	  }
+	}
+
+	var callbacks = [];
+	var waiting = false;
+
+	function flushCallbacks() {
+	  var cbs = callbacks.slice(0);
+	  waiting = false;
+	  callbacks = [];
+	  cbs.forEach(function (cb) {
+	    return cb();
+	  });
+	} // nextTick 不是创建了一个异步任务  而是将这个任务维护到了队列中
+	// nextTick 没有直接使用某个api  而是采用优雅降级的方式
+
+
+	var timerFunc;
+
+	if (Promise) {
+	  timerFunc = function timerFunc() {
+	    Promise.resolve().then(function () {
+	    });
+	  };
+	} else if (MutationObserver) {
+	  //这里传入的回调是异步的
+	  var observer = new MutationObserver(flushCallbacks);
+	  var textNode = document.createTextNode(1);
+	  observer.observe(textNode, {
+	    characterData: true
+	  });
+
+	  timerFunc = function timerFunc() {
+	    textNode.textContent = 2;
+	  };
+	} else if (setImmediate) {
+	  timerFunc = function timerFunc() {
+	    setImmediate(flushCallbacks);
+	  };
+	} else {
+	  timerFunc = function timerFunc() {
+	    setTimeout(flushCallbacks);
+	  };
+	}
+
+	function nextTick(cb) {
+	  callbacks.push(cb); //维护nextTick中的callback方法
+
+	  if (!waiting) {
+	    timerFunc();
+	    waiting = true;
+	  }
+	} // 需要给每个属性增加一个dep  目的是收集watcher
+
 	function initState(vm) {
 	  var opt = vm.$options;
 
 	  if (opt.data) {
 	    initData(vm);
+	  }
+
+	  if (opt.computed) {
+	    initComputed(vm);
 	  }
 	} // 代理数据 get set时触发 返回指定数据
 
@@ -368,6 +544,57 @@
 	  for (var key in data) {
 	    proxy(vm, '_data', key);
 	  }
+	} // 初始化computed
+
+
+	function initComputed(vm) {
+	  var computed = vm.$options.computed; // 将计算属性watcher保存到vm上
+
+	  var watchers = vm._computedWatchers = {};
+
+	  for (var key in computed) {
+	    var userDefine = computed[key]; // 我们需要监控计算属性中get的变化
+
+	    var fn = typeof userDefine === 'function' ? userDefine : userDefine.get; // 将属性和watcher对应起来
+
+	    watchers[key] = new Watcher(vm, fn, {
+	      lazy: true
+	    });
+	    defineComputed(vm, key, userDefine);
+	  }
+	} // 将computed中的方法 添加 Object.defineProperty
+
+
+	function defineComputed(target, key, userDefine) {
+	  // const getter = typeof userDefine === 'function' ? userDefine : userDefine.get
+	  var setter = userDefine.set || function () {}; // 可以通过实例访问相应的属性
+
+
+	  Object.defineProperty(target, key, {
+	    get: createComputedGetter(key),
+	    set: setter
+	  });
+	} // 计算属性根本不会收集依赖 只会让自己的依赖属性去收集依赖
+
+
+	function createComputedGetter(key) {
+	  // 检测一下是否执行这个getter
+	  return function () {
+	    var watcher = this._computedWatchers[key];
+
+	    if (watcher.dirty) {
+	      // 如果是脏的  就去执行用户传入的函数
+	      watcher.evaluete(); //求值后 下次就成false了
+	    }
+
+	    if (Dep.target) {
+	      // 计算属性出栈后还要渲染watcher
+	      // 应该让计算属性watcher里面的属性去收集上一层watcher
+	      watcher.depend();
+	    }
+
+	    return watcher.value; //最后返回的是watcher上的value
+	  };
 	}
 
 	var ncname = "[a-zA-Z_][\\-\\.0-9_a-zA-Z]*";
@@ -592,141 +819,6 @@
 	  return render;
 	}
 
-	var id = 0;
-	/**
-	 * 1：当我们创建渲染watcher的时候我们会把当前渲染的watcher放到dep.target上
-	 * 2：调用render会取值 走到get上
-	 * 注意：每个属性有一个dep （属性就是被观察者），watcher就是观察者
-	 * 属性变化了会通知观察者来更新 -->观察者模式
-	 */
-	// 依赖收集 不同的组件有不同的watcher
-
-	var Watcher = /*#__PURE__*/function () {
-	  function Watcher(vm, fn, options) {
-	    _classCallCheck(this, Watcher);
-
-	    this.id = id++;
-	    this.renderWatcher = options;
-	    this.getter = fn; //getter意味着调用这个函数可以发生取值操作
-
-	    this.deps = []; //后续我们实现计算属性和一些清理工作需要用到
-
-	    this.depsId = new Set();
-	    this.get();
-	  }
-
-	  _createClass(Watcher, [{
-	    key: "addDep",
-	    value: function addDep(dep) {
-	      // 一个组件对应着多个属性  重复的属性也不用记录
-	      var id = dep.id;
-
-	      if (!this.depsId.has(id)) {
-	        this.deps.push(dep);
-	        this.depsId.add(id);
-	        dep.addSub(this); //watcher已经记住dep而且去重了 此时dep也记住watcher
-	      }
-	    }
-	  }, {
-	    key: "get",
-	    value: function get() {
-	      Dep.target = this;
-	      this.getter(); //去vm上取值
-	    }
-	  }, {
-	    key: "update",
-	    value: function update() {
-	      queenWatcher(this); //吧当前的watcher暂存起来
-	    }
-	  }, {
-	    key: "run",
-	    value: function run() {
-	      this.get();
-	    }
-	  }]);
-
-	  return Watcher;
-	}();
-
-	var queen = [];
-	var has = {};
-	var pending = false;
-
-	function flushSchedulerQueen() {
-	  var flushQueen = queen.slice(0);
-	  queen = [];
-	  has = {};
-	  pending = false;
-	  flushQueen.forEach(function (q) {
-	    q.run();
-	  });
-	}
-
-	function queenWatcher(watcher) {
-	  var id = watcher.id;
-
-	  if (!has[id]) {
-	    queen.push(watcher);
-	    has[id] = true; // 不管update 执行多少次 但是最终只执行一轮 刷新操作
-
-	    if (!pending) {
-	      setTimeout(flushSchedulerQueen, 0);
-	      pending = true;
-	    }
-	  }
-	}
-
-	var callbacks = [];
-	var waiting = false;
-
-	function flushCallbacks() {
-	  var cbs = callbacks.slice(0);
-	  waiting = false;
-	  callbacks = [];
-	  cbs.forEach(function (cb) {
-	    return cb();
-	  });
-	} // nextTick 不是创建了一个异步任务  而是将这个任务维护到了队列中
-	// nextTick 没有直接使用某个api  而是采用优雅降级的方式
-
-
-	var timerFunc;
-
-	if (Promise) {
-	  timerFunc = function timerFunc() {
-	    Promise.resolve().then(function () {
-	    });
-	  };
-	} else if (MutationObserver) {
-	  //这里传入的回调是异步的
-	  var observer = new MutationObserver(flushCallbacks);
-	  var textNode = document.createTextNode(1);
-	  observer.observe(textNode, {
-	    characterData: true
-	  });
-
-	  timerFunc = function timerFunc() {
-	    textNode.textContent = 2;
-	  };
-	} else if (setImmediate) {
-	  timerFunc = function timerFunc() {
-	    setImmediate(flushCallbacks);
-	  };
-	} else {
-	  timerFunc = function timerFunc() {
-	    setTimeout(flushCallbacks);
-	  };
-	}
-
-	function nextTick(cb) {
-	  callbacks.push(cb); //维护nextTick中的callback方法
-
-	  if (!waiting) {
-	    timerFunc();
-	    waiting = true;
-	  }
-	} // 需要给每个属性增加一个dep  目的是收集watcher
-
 	// h() _c()
 	function createElementVNode(vm, tag, data) {
 	  if (data == null) {
@@ -885,7 +977,7 @@
 	    vm.$options = mergeOptions(this.constructor.options, options); //将用户的实例挂载到实例（vm）上
 
 	    callHook(vm, 'beforeCreate');
-	    initState(vm); //初始化状态
+	    initState(vm); //初始化状态 初始化计算属性 初始化 watch
 
 	    callHook(vm, 'created');
 

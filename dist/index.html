@@ -7,29 +7,29 @@
 		<title>Document</title>
 	</head>
 	<body>
-		<div id="app" style="color:red">
-			<div class="msg">
-				{{ msg }} 
-			</div>
-			<div class="test">
-				{{ arr }}
-			</div>
+		<div id="app">
+			{{ fullname }} {{ fullname }} {{ fullname }}
 		</div>
 		<script src="./vue.js"></script>
 		<script>
 			let vm = new Vue({
 				el: '#app',
 				data: {
-					msg: 'Hello World',
-					test: 'test',
-          obj: {
-            name:'hello',
-            age: 18
-          },
-					arr:[3,4,5,[1,2]]
+					firstname: '张',
+					lastname: '三'
+				},
+				computed:{
+					fullname(){
+						console.log("run");
+						return this.firstname + this.lastname
+					}
 				}
 			})
 			
+
+			setTimeout(()=>{
+				vm.firstname = '李'
+			},2000)
 		</script>
 	</body>
 </html>
