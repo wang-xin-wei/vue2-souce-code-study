@@ -7,7 +7,7 @@
 		<title>Document</title>
 	</head>
 	<body>
-		<div id="app">{{ firstname }} {{ lastname }}</div>
+		<div id="app"></div>
 		<script src="./vue.js"></script>
 		<!-- <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.12/vue.js"></script> -->
 		<script>
@@ -17,22 +17,8 @@
 					firstname: '张',
 					lastname: '三',
 				},
-
-				watch: {
-					firstname(newVal,oldVal) {
-						console.log(newVal,oldVal,'22');
-					},
-				},
 			})
 
-			vm.$watch(()=>vm.firstname,(newVal,oldVal)=>{
-				console.log(newVal,oldVal,'11');
-			})
-
-
-			setTimeout(()=>{
-				vm.firstname = '李'
-			},1000)
 			
 		</script>
 	</body>

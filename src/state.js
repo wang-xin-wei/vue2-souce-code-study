@@ -1,7 +1,6 @@
 import Dep from './observe/dep'
 import { observe } from './observe/index'
-
-import Watcher from './observe/watcher'
+import Watcher, { nextTick } from './observe/watcher'
 
 // 初始化状态
 export function initState(vm) {
@@ -12,11 +11,10 @@ export function initState(vm) {
 	if (opt.computed) {
 		initComputed(vm)
 	}
-	if(opt.watch){
+	if (opt.watch) {
 		initWatch(vm)
 	}
 }
-
 
 // 初始化watch
 function initWatch(vm) {
@@ -24,26 +22,23 @@ function initWatch(vm) {
 	for (const key in watch) {
 		// 拿到值  判断是什么情况
 		const handler = watch[key]
-		if(Array.isArray(handler)){
+		if (Array.isArray(handler)) {
 			for (let i = 0; i < handler.length; i++) {
-				createWatcher(vm,key,handler[i])
-				
+				createWatcher(vm, key, handler[i])
 			}
-		}else{
-			createWatcher(vm,key,handler)
+		} else {
+			createWatcher(vm, key, handler)
 		}
 	}
 }
 
-
-function createWatcher(vm,key,handler) {
+function createWatcher(vm, key, handler) {
 	// handler可能是字符串 函数 对象（不考虑）
-	if(typeof handler === 'string'){
+	if (typeof handler === 'string') {
 		handler = vm[handler]
 	}
-	return vm.$watch(key,handler)
+	return vm.$watch(key, handler)
 }
-
 
 // 代理数据 get set时触发 返回指定数据
 function proxy(vm, target, key) {
@@ -78,7 +73,7 @@ function initData(vm) {
 function initComputed(vm) {
 	const computed = vm.$options.computed
 	// 将计算属性watcher保存到vm上
-	const watchers = vm._computedWatchers = {}
+	const watchers = (vm._computedWatchers = {})
 	for (const key in computed) {
 		let userDefine = computed[key]
 
@@ -103,7 +98,6 @@ function defineComputed(target, key, userDefine) {
 	})
 }
 
-
 // 计算属性根本不会收集依赖 只会让自己的依赖属性去收集依赖
 function createComputedGetter(key) {
 	// 检测一下是否执行这个getter
@@ -112,13 +106,22 @@ function createComputedGetter(key) {
 
 		if (watcher.dirty) {
 			// 如果是脏的  就去执行用户传入的函数
-			watcher.evaluete()   //求值后 下次就成false了
+			watcher.evaluete() //求值后 下次就成false了
 		}
-		if(Dep.target){
+		if (Dep.target) {
 			// 计算属性出栈后还要渲染watcher
 			// 应该让计算属性watcher里面的属性去收集上一层watcher
 			watcher.depend()
 		}
-		return watcher.value  //最后返回的是watcher上的value
+		return watcher.value //最后返回的是watcher上的value
+	}
+}
+
+export function initStateMixin(Vue) {
+	Vue.prototype.$nextTick = nextTick
+
+	//  所有watch 最终调用的都是这个方法
+	Vue.prototype.$watch = function (exprOrFn, cb) {
+		new Watcher(this, exprOrFn, { user: true }, cb)
 	}
 }
